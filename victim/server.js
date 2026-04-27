@@ -9,7 +9,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 let email = 'alice@example.com';
-let secureMode = false; // false = no CSRF token, true = CSRF token required
+let secureMode = false;
 let cookieMode = 'lax'; // 'lax' or 'none'
 
 const session = {
@@ -32,6 +32,7 @@ function requireSession(req, res, next) {
       <h1>401 Unauthorized</h1>
       <p>No valid session cookie.</p>
       <p>Email was NOT changed.</p>
+      <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
       <p><a href="/">Back</a></p>
     `);
   }
@@ -51,6 +52,12 @@ app.get('/', (req, res) => {
 
     <p>👤 Logged in as: <b>${session.userName}</b></p>
     <p>Email: <b>${email}</b></p>
+
+    <hr>
+
+    <h2>Debug Info</h2>
+    <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
+    <p>Server cookie mode: <b>SameSite=${cookieMode}</b></p>
 
     <hr>
 
@@ -83,20 +90,9 @@ app.get('/', (req, res) => {
     <hr>
 
     <h2>Legitimate Actions</h2>
-
     <ul>
       <li><a href="/settings-post">Change Email via POST form</a></li>
       <li><a href="/settings-get">Change Email via GET form (bad design)</a></li>
-    </ul>
-
-    <hr>
-
-    <h2>Demo Notes</h2>
-    <ul>
-      <li><b>POST + SameSite=None</b>: attack can work if no CSRF token is required.</li>
-      <li><b>POST + SameSite=Lax</b>: modern browsers often block cookie sending.</li>
-      <li><b>GET + SameSite=Lax</b>: can still work as top-level navigation.</li>
-      <li><b>CSRF token ON</b>: POST attack fails because attacker cannot provide the token.</li>
     </ul>
   `);
 });
@@ -106,6 +102,8 @@ app.get('/settings-post', (req, res) => {
 
   res.send(`
     <h1>Settings: Change Email via POST</h1>
+
+    <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
 
     <p>CSRF protection:
       <b style="color:${modeColor(secureMode)}">${secureMode ? 'ON' : 'OFF'}</b>
@@ -153,11 +151,14 @@ app.get('/settings-get', (req, res) => {
 app.post('/toggle-csrf', requireSession, (req, res) => {
   secureMode = !secureMode;
   session.csrfToken = crypto.randomBytes(16).toString('hex');
+  setDemoCookie(res);
   res.redirect('/');
 });
 
-app.post('/toggle-cookie', requireSession, (req, res) => {
+// Wichtig für Demo: nicht mit requireSession schützen
+app.post('/toggle-cookie', (req, res) => {
   cookieMode = cookieMode === 'lax' ? 'none' : 'lax';
+  setDemoCookie(res);
   res.redirect('/');
 });
 
@@ -169,6 +170,7 @@ app.post('/change-email', requireSession, (req, res) => {
       <h1>403 Forbidden</h1>
       <p>Invalid or missing CSRF token.</p>
       <p>Email was NOT changed.</p>
+      <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
       <p><a href="/">Back</a></p>
     `);
   }
@@ -178,11 +180,11 @@ app.post('/change-email', requireSession, (req, res) => {
   res.send(`
     <h1>Email changed via POST</h1>
     <p>New email: <b>${email}</b></p>
+    <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
     <p><a href="/">Back</a></p>
   `);
 });
 
-// Intentionally vulnerable GET endpoint
 app.get('/change-email-get', requireSession, (req, res) => {
   setDemoCookie(res);
 
@@ -191,6 +193,7 @@ app.get('/change-email-get', requireSession, (req, res) => {
   res.send(`
     <h1>Email changed via GET</h1>
     <p>New email: <b>${email}</b></p>
+    <p>Received session cookie: <b>${req.cookies.session || 'none'}</b></p>
     <p><a href="/">Back</a></p>
   `);
 });
