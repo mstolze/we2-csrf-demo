@@ -1,10 +1,12 @@
 const express = require('express');
 const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 let email = 'alice@example.com';
 let secureMode = false; // false = no CSRF token, true = CSRF token required
@@ -22,6 +24,19 @@ function setDemoCookie(res) {
     secure: true,
     sameSite: cookieMode
   });
+}
+
+function requireSession(req, res, next) {
+  if (req.cookies.session !== 'alice-session') {
+    return res.status(401).send(`
+      <h1>401 Unauthorized</h1>
+      <p>No valid session cookie.</p>
+      <p>Email was NOT changed.</p>
+      <p><a href="/">Back</a></p>
+    `);
+  }
+
+  next();
 }
 
 function modeColor(value) {
@@ -135,18 +150,18 @@ app.get('/settings-get', (req, res) => {
   `);
 });
 
-app.post('/toggle-csrf', (req, res) => {
+app.post('/toggle-csrf', requireSession, (req, res) => {
   secureMode = !secureMode;
   session.csrfToken = crypto.randomBytes(16).toString('hex');
   res.redirect('/');
 });
 
-app.post('/toggle-cookie', (req, res) => {
+app.post('/toggle-cookie', requireSession, (req, res) => {
   cookieMode = cookieMode === 'lax' ? 'none' : 'lax';
   res.redirect('/');
 });
 
-app.post('/change-email', (req, res) => {
+app.post('/change-email', requireSession, (req, res) => {
   setDemoCookie(res);
 
   if (secureMode && req.body.csrfToken !== session.csrfToken) {
@@ -168,7 +183,7 @@ app.post('/change-email', (req, res) => {
 });
 
 // Intentionally vulnerable GET endpoint
-app.get('/change-email-get', (req, res) => {
+app.get('/change-email-get', requireSession, (req, res) => {
   setDemoCookie(res);
 
   email = req.query.email || email;
